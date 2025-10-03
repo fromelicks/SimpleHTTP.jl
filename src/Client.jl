@@ -2,16 +2,22 @@
 module Client
 
 using ..Common: make_response, report_error, ParamData, read_json,
-    parse_params, write_json, ArgLoc,
+    parse_params, write_json, ArgLoc, NotFoundError, ErrorResponse,
+    CustomRequestError,
     JSONFIELD, QUERY, URL, JSONFIELD, JSON, ALLHEADERS, HEADER
 
 import OrderedCollections: OrderedDict
 import MacroTools
 import HTTP
 
+struct UnexpectedResponseError <: Exception
+    code::Int
+    msg::String
+end
 
 @kwdef struct ClientConfig
     url::String
+    exceptions::Dict{Int, Type{<:Exception}} = Dict{Int, Type{<:Exception}}()
 end
 
 function construct_body_type(
@@ -52,6 +58,28 @@ function get_path_parts(path)
         error("Unknown type $(typeof(part))")
     end
     return new_path
+end
+
+function get_error(resp)
+    try
+        read_json(resp.body, ErrorResponse).error
+    catch e
+        return String(resp.body)
+    end
+end
+
+function get_exception(resp, cfg)
+    if !haskey(cfg.exceptions, resp.status)
+        throw(UnexpectedResponseError(
+            resp.status,
+            get_error(resp)
+        ))
+    end
+    type = cfg.exceptions[resp.status]
+    if type <: CustomRequestError
+        return read_json(resp.body, type)
+    end
+    return type(read_json(resp.body, ErrorResponse).error)
 end
 
 function construct_expressions(cfg, path, method, sig)
@@ -123,9 +151,16 @@ function construct_expressions(cfg, path, method, sig)
     else
         ret_stmt = :(return $read_json(resp.body, $rettype))
     end
+
+    handle_errors = quote
+        if resp.status >= 300
+            throw($get_exception(resp, $cfg))
+        end
+    end
     if isnothing(create_body_expr)
         res = esc(:(function $route_name($(func_args...))::$rettype
-            resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)])
+            resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)], status_exception = false)
+            $handle_errors
             $ret_stmt
         end))
     else
@@ -134,7 +169,8 @@ function construct_expressions(cfg, path, method, sig)
 
             function $route_name($(func_args...))::$rettype
                 $create_body_expr
-                resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)],  body=req_body)
+                resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)],  body=req_body, status_exception = false)
+                $handle_errors
                 $ret_stmt
             end
         end)

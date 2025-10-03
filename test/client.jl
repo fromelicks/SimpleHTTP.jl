@@ -1,11 +1,15 @@
 
 module ClientTest
 
-using ..ServerTest: User
+using ..ServerTest: User, UserNotFoundError
 using SimpleHTTP
 using UUIDs: uuid4, UUID
+
 cfg = ClientConfig(
-    url = "http://0.0.0.0:8080/api/v1/test"
+    url = "http://0.0.0.0:8080/api/v1/test",
+    exceptions = Dict{Int, Type{<:Exception}}(
+        404 => UserNotFoundError
+    )
 )
 
 Client.@post(

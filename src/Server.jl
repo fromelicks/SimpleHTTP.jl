@@ -3,8 +3,8 @@
 module Server
 
 using ..Common: make_response, report_error, ParamData, read_json,
-    parse_params, write_json, ArgLoc,
-    JSONFIELD, QUERY, JSON, ALLHEADERS, HEADER
+    parse_params, write_json, ArgLoc, CustomRequestError,
+    JSONFIELD, QUERY, JSON, ALLHEADERS, HEADER, ErrorResponse
 
 import OrderedCollections: OrderedDict
 import MacroTools
@@ -21,10 +21,22 @@ end
 
 get_query_params(req::HTTP.Request) = req.target |> HTTP.URI |> HTTP.queryparams
 
+function find_err_code(code_map, e::Exception)
+    for (type, code) in code_map
+        if e isa type
+            return code
+        end
+    end
+    return nothing
+end
+
 function error_response(cfg, e::Exception)
     code = find_err_code(cfg.error_codes, e)
     isnothing(code) &&
         return make_response(500, write_json(ErrorResponse(e)))
+    if e isa CustomRequestError
+        return make_response(code, write_json(e))
+    end
     return make_response(code, write_json(ErrorResponse(e)))
 end
 

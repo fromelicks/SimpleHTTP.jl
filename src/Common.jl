@@ -12,7 +12,8 @@ import Sockets: IPAddr
 const default_response_headers::Vector{Pair{String, String}} =
     Pair{String, String}["Content-Type"=>"application/json;charset=UTF-8"]
 
-abstract type NotFoundError <: Exception end
+
+abstract type CustomRequestError <: Exception end
 
 const AbstractExpr = Union{Symbol, Expr, QuoteNode}
 @enum ArgLoc QUERY URL JSONFIELD JSON ALLHEADERS HEADER
@@ -47,21 +48,21 @@ function report_error(e)
     @error String(take!(buff))
 end
 
+function error_string(e::T) where {T <: Exception}
+    flds = fieldnames(T)
+    if length(flds) == 1 &&
+        only(fieldtypes(T))  <: AbstractString
+        return getproperty(e, only(flds))
+    end
+    return string(e)
+end
+
 struct ErrorResponse
     error::String
 end
 
 function ErrorResponse(e::Exception)
-    return ErrorResponse(string(e))
-end
-
-function find_err_code(code_map, e::Exception)
-    for (type, code) in code_map
-        if e isa type
-            return code
-        end
-    end
-    return nothing
+    return ErrorResponse(error_string(e))
 end
 
 function get_param_data(argname, type_expr, path, default)

@@ -3,11 +3,18 @@ module ServerTest
 
 using SimpleHTTP
 
+struct UserNotFoundError <: Exception
+    msg::String
+end
+
 using UUIDs: uuid4, UUID
 cfg = ServerConfig(
     ip = ip"0.0.0.0",
     port = 8080,
     path = "/api/v1/test",
+    error_codes = Pair{DataType, Int}[
+        UserNotFoundError => 404,
+    ]
 )
 
 mutable struct User
@@ -58,7 +65,9 @@ Server.@post(
 Server.@get(
     cfg,
     "/users/get/{id}",
-    function get_age(id::UUID)::User
+    function get_user(id::UUID)::User
+        user = get(users, id, nothing)
+        isnothing(user) && throw(UserNotFoundError("User id $id not found"))
         return users[id]
     end
 )
