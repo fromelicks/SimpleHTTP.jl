@@ -2,7 +2,7 @@
 module Client
 
 using ..Common: make_response, report_error, ParamData, read_json,
-    parse_params, write_json, ArgLoc, NotFoundError, ErrorResponse,
+    parse_params, write_json, ArgLoc, ErrorResponse,
     CustomRequestError,
     JSONFIELD, QUERY, URL, JSONFIELD, JSON, ALLHEADERS, HEADER
 

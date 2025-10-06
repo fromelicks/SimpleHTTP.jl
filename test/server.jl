@@ -24,6 +24,12 @@ mutable struct User
     name::String
 end
 
+function fields_equal(l, r, fields)
+    return all((splat(==).((getproperty.((l, r), prop) for prop in fields))))
+end
+
+Base.:(==)(l::User, r::User) = fields_equal(l, r, fieldnames(User))
+
 struct CreateUserRequest
     name::String
     age::Int
@@ -73,6 +79,15 @@ Server.@get(
         user = get(users, id, nothing)
         isnothing(user) && throw(UserNotFoundError("User id $id not found"))
         return users[id]
+    end,
+    error_codes
+)
+
+Server.@get(
+    cfg,
+    "/users/get",
+    function get_all_users()::Dict{UUID, User}
+        return users
     end,
     error_codes
 )

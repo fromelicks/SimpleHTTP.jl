@@ -41,4 +41,11 @@ Client.@get(
     exceptions
 )
 
+Client.@get(
+    cfg,
+    "/users/get",
+    get_all_users()::Dict{UUID, User},
+    exceptions
+)
+
 end

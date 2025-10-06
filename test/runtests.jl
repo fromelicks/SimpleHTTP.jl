@@ -37,6 +37,7 @@ end
     user = App.get_user(id)
     @test user.name == "Dave"
     @test user.age == 40
+    @test App.get_all_users() == Dict(id => user)
     @test App.set_age(id, 20) === nothing
     @test App.get_user(id).age == 20
     @test App.delete_user(id) === nothing
