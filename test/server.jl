@@ -92,4 +92,22 @@ Server.@get(
     error_codes
 )
 
+Server.@get(
+    cfg,
+    "/users/echo_lang",
+    function echo_lang(lang::Headers["Accept-Language"] = "en")::String
+        return lang
+    end,
+    error_codes
+)
+
+Server.@get(
+    cfg,
+    "/users/echo_headers",
+    function echo_headers(hdrs::Headers)::Dict{String, String}
+        return hdrs
+    end,
+    error_codes
+)
+
 end

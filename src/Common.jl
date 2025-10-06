@@ -15,7 +15,7 @@ const default_response_headers::Vector{Pair{String, String}} =
 
 abstract type CustomRequestError <: Exception end
 
-const AbstractExpr = Union{Symbol, Expr, QuoteNode}
+const AbstractExpr = Union{Symbol, Expr, QuoteNode, String}
 @enum ArgLoc QUERY URL JSONFIELD JSON ALLHEADERS HEADER
 
 @kwdef struct ParamData
@@ -79,11 +79,11 @@ function get_param_data(argname, type_expr, path, default)
         error("Field type not provided for \"$argname\"")
 
     MacroTools.@capture(type_expr, Headers) &&
-        return ParamData(:(OrderedDict{String, String}), default, ALLHEADERS)
+        return ParamData(:(Dict{String, String}), default, ALLHEADERS)
 
     if MacroTools.@capture(type_expr, Headers[key_])
         key isa String || error("expected string for header key in $argname")
-        return ParamData(:String, default, HEADER, key)
+        return ParamData(:String, default, HEADER, lowercase(key))
     end
 
     if contains(path, '{' * string(argname) * '}')

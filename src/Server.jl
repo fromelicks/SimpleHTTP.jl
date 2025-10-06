@@ -4,7 +4,7 @@ module Server
 
 using ..Common: make_response, report_error, ParamData, read_json,
     parse_params, write_json, ArgLoc, CustomRequestError,
-    JSONFIELD, QUERY, JSON, ALLHEADERS, HEADER, ErrorResponse
+    JSONFIELD, URL, QUERY, JSON, ALLHEADERS, HEADER, ErrorResponse
 
 import OrderedCollections: OrderedDict
 import MacroTools
@@ -46,11 +46,11 @@ function parsing_error_response(e::Exception, type::Type)
     )
 end
 
-function no_param_provided_response(param_name::String)
+function no_param_provided_response(param_name::String, is_header::Bool)
     return make_response(
         422,
         write_json(
-            ErrorResponse("Required parameter \"$param_name\" not provided"),
+            ErrorResponse("Required $(is_header ? "header" : "parameter") \"$param_name\" not provided"),
         ),
     )
 end
@@ -77,6 +77,12 @@ function construct_body_type(
     end))
 end
 
+function normalize_headers(
+    hdrs
+)
+    return ((lowercase(hdr) => value) for (hdr, value) in hdrs)
+end
+
 function construct_handler(
     params,
     body_type,
@@ -84,7 +90,7 @@ function construct_handler(
     route_function::Symbol,
     errors_map,
 )
-    exprs = []
+    arg_defs = []
     resp_code = rettype == :Nothing ? 204 : 200
     if !isnothing(body_type)
         parsing = :(parsedbody = try
@@ -98,50 +104,71 @@ function construct_handler(
     end
 
     for (argname, param) in params
-        parname = string(argname)
+        argname_str = string(argname)
         if param.loc == JSONFIELD
-            push!(exprs, :($argname = if !isnothing(parsedbody.$(argname))
+            push!(arg_defs, :($argname = if !isnothing(parsedbody.$(argname))
                 parsedbody.$(argname)
             else
                 $(param.default)
             end))
             continue
-        end
-        if param.loc == JSON
-            push!(exprs, :($argname = parsedbody))
+        elseif param.loc == JSON
+            push!(arg_defs, :($argname = parsedbody))
             continue
-        end
-        if isnothing(param.default)
+        elseif param.loc ∈ [URL, QUERY, HEADER]
+            if param.loc == HEADER
+                param_source = :req_headers
+                is_header = true
+                param_key = param.headerKey
+            else
+                param_source = :queryparams
+                is_header = false
+                param_key = argname_str
+            end
+            if isnothing(param.default)
+                push!(
+                    arg_defs,
+                    :(
+                        !$haskey($param_source, $param_key) &&
+                            return $no_param_provided_response($param_key, $is_header)
+                    ),
+                )
+            end
+            if param.type == :String || param.type == :AbstractString
+                push!(
+                    arg_defs,
+                    :($argname = $get($param_source, $param_key, $(param.default))),
+                )
+                continue
+            end
             push!(
-                exprs,
+                arg_defs,
                 :(
-                    !$haskey(queryparams, $parname) &&
-                    return $no_param_provided_response($parname)
-                ),
-            )
-        end
-        if param.type == :String
-            push!(
-                exprs,
-                :($argname = $get(queryparams, $parname, $(param.default))),
+                    $argname = if $haskey($param_source, $param_key)
+                        try
+                            $parse($(param.type), queryparams[$param_key])
+                        catch e
+                            $report_error(e)
+                            return $parsing_error_response(e, $(param.type))
+                        end
+                    else
+                        $(param.default)
+                    end
+                )
             )
             continue
+        elseif param.loc == ALLHEADERS
+            if !isnothing(param.default)
+                error("Having default for all headers for a server method is currently unsupported")
+            end
+            push!(
+                arg_defs,
+                :($argname = req_headers)
+            )
+            continue
+        else
+            error("Unknown parameter location $(param.loc)")
         end
-        push!(
-            exprs,
-            :(
-                $argname = if $haskey(queryparams, $parname)
-                    try
-                        $parse($(param.type), queryparams[$parname])
-                    catch e
-                        $report_error(e)
-                        return $parsing_error_response(e, $(param.type))
-                    end
-                else
-                    $(param.default)
-                end
-            ),
-        )
     end
     handler_name = gensym(Symbol(string(route_function) * "_handler_"))
     argnames = keys(params)
@@ -153,8 +180,9 @@ function construct_handler(
                     $get_query_params(req),
                     something($HTTP.getparams(req), Dict{String, String}()),
                 )
+                req_headers = Dict{String, String}($normalize_headers(req.headers)...)
                 $parsing
-                $(exprs...)
+                $(arg_defs...)
                 res = try
                     $route_function($(argnames...))
                 catch e
@@ -165,6 +193,25 @@ function construct_handler(
             end
         end,
     )
+end
+
+function get_bodytype(params)
+    body_params = filter(((_, par),) -> par.loc == JSONFIELD, params)
+    body_type_param = filter(((_, par),) -> par.loc == JSON, params)
+    if !isempty(body_params) && !isempty(body_type_param)
+        error("Cannot have Json and JsonField in one signature")
+    elseif !isempty(body_params)
+        body_type, body_def = construct_body_type(body_params, route_name)
+    elseif !isempty(body_type_param)
+        length(body_type_param) == 1 ||
+            error("Cannot have multiple bodies in signature")
+        body_type = last(only(body_type_param)).type
+        body_def = nothing
+    else
+        body_def = nothing
+        body_type = nothing
+    end
+    return body_def, body_type
 end
 
 function create_route_bodies(path, func, cfg, errors)
@@ -185,23 +232,7 @@ function create_route_bodies(path, func, cfg, errors)
         )
     end
 
-    body_params = filter(((_, par),) -> par.loc == JSONFIELD, params)
-    body_type_param = filter(((_, par),) -> par.loc == JSON, params)
-
-    if !isempty(body_params) && !isempty(body_type_param)
-        error("Cannot have Json and JsonField in one signature")
-    elseif !isempty(body_params)
-        body_type, body_def = construct_body_type(body_params, route_name)
-    elseif !isempty(body_type_param)
-        length(body_type_param) == 1 ||
-            error("Cannot have multiple bodies in signature")
-        body_type = last(only(body_type_param)).type
-        body_def = nothing
-    else
-        body_def = nothing
-        body_type = nothing
-    end
-
+    body_def, body_type = get_bodytype(params)
     errors_var = gensym("errors_for_$route_name")
     errors_def = esc(:(const $errors_var = $errors))
     func_args = Iterators.map(params) do (argname, par)

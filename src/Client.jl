@@ -82,6 +82,25 @@ function get_exception(resp, err_map)
     return type(read_json(resp.body, ErrorResponse).error)
 end
 
+function get_headers_def(params)
+    headers = filter(((_, par),) -> par.loc == HEADER, params)
+    all_headers = filter(((_, par),) -> par.loc == ALLHEADERS, params)
+    if !isempty(headers) && !isempty(all_headers)
+        error("Cannot have individual headers and generel Headers in one signature")
+    end
+    if isempty(headers) && isempty(all_headers)
+        return :headers, :(headers = Dict{String, String}())
+    end
+    if !isempty(all_headers)
+        var_name = only(keys(all_headers))
+        return :headers, :(headers = $var_name)
+    end
+    pairs = (:($(par.headerKey) => $var_name) for (var_name, par) in headers)
+    return :headers, :(headers = Dict{String, String}(
+        $(pairs...)
+    ))
+end
+
 function construct_expressions(cfg, path, method, sig, err_map)
     MacroTools.@capture(sig, route_name_(args__)::rettype_) ||
         error("Invalid endpoint signature. Maybe you forgot return type?")
@@ -106,6 +125,7 @@ function construct_expressions(cfg, path, method, sig, err_map)
     full_body_param = filter(((_, par),) -> par.loc == JSON, params)
     query_params = filter(((_, par),) -> par.loc == QUERY, params)
     url_params = filter(((_, par),) -> par.loc == URL, params)
+    headers_var, headers_def = get_headers_def(params)
     if !isempty(body_params) && !isempty(full_body_param)
         error("Cannot have Json and JsonField in one signature")
     elseif !isempty(body_params)
@@ -136,7 +156,7 @@ function construct_expressions(cfg, path, method, sig, err_map)
         if isnothing(par.default)
             return :($(argname)::$(par.type))
         else
-            return :($(argname)::$(par.type) = $(par.default))
+            return Expr(:kw, :($argname::$(par.type)), par.default)
         end
     end |> collect
     #! format: off
@@ -164,7 +184,11 @@ function construct_expressions(cfg, path, method, sig, err_map)
 
             function $route_name($(func_args...))::$rettype
                 return Base.with_logger($cfg.logger) do
-                    resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)], status_exception = false)
+                    $headers_def
+                    resp = $HTTP.request($method, $cfg.url * $url_patterm;
+                        query = [$(query_args...)],
+                        headers = $headers_var,
+                        status_exception = false)
                     $handle_errors
                     $ret_stmt
                 end
@@ -177,8 +201,13 @@ function construct_expressions(cfg, path, method, sig, err_map)
 
             function $route_name($(func_args...))::$rettype
                 return Base.with_logger($cfg.logger) do
+                    $headers_def
                     $create_body_expr
-                    resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)],  body=req_body, status_exception = false)
+                    resp = $HTTP.request($method, $cfg.url * $url_patterm;
+                        query = [$(query_args...)],
+                        body=req_body,
+                        headers = $headers_var,
+                        status_exception = false)
                     $handle_errors
                     $ret_stmt
                 end

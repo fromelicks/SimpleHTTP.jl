@@ -48,4 +48,42 @@ Client.@get(
     exceptions
 )
 
+Client.@get(
+    cfg,
+    "/users/echo_lang",
+    echo_lang(lang::Headers["Accept-Language"])::String,
+    exceptions
+)
+
+Client.@get(
+    cfg,
+    "/users/echo_lang",
+    server_default_lang_en()::String,
+    exceptions
+)
+
+Client.@get(
+    cfg,
+    "/users/echo_lang",
+    client_default_lang_ru(lang::Headers["Accept-Language"] = "ru")::String,
+    exceptions
+)
+
+Client.@get(
+    cfg,
+    "/users/echo_headers",
+    echo_headers(lang::Headers)::Dict{String, String},
+    exceptions
+)
+
+Client.@get(
+    cfg,
+    "/users/echo_headers",
+    echo_headers_with_default(lang::Headers = Dict{String, String}(
+        "accept-language" => "ru",
+        "auth" => "secret_token"
+    ))::Dict{String, String},
+    exceptions
+)
+
 end

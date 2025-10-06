@@ -43,3 +43,24 @@ end
     @test App.delete_user(id) === nothing
 end
 
+@testset "header arguments" begin
+    @test App.echo_lang("de") == "de"
+    @test App.server_default_lang_en() == "en"
+    @test App.client_default_lang_ru() == "ru"
+    @test App.client_default_lang_ru("de") == "de"
+
+    headers = Dict("hdr1" => "val1", "BIG-HDR-2" => "val2")
+    res = App.echo_headers(headers)
+    @test all(res[lowercase(k)] == headers[k] for k in keys(headers))
+
+    default_headers = Dict{String, String}(
+        "accept-language" => "ru",
+        "auth" => "secret_token"
+    )
+
+    res = App.echo_headers_with_default()
+    @test all(res[k] == default_headers[k] for k in keys(default_headers))
+
+    res = App.echo_headers_with_default(Dict{String, String}())
+    @test all(!haskey(res, k) for k in keys(default_headers))
+end
