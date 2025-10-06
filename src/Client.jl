@@ -17,6 +17,7 @@ end
 
 @kwdef struct ClientConfig
     url::String
+    logger::Base.AbstractLogger = Base.global_logger()
 end
 
 function construct_body_type(
@@ -162,9 +163,11 @@ function construct_expressions(cfg, path, method, sig, err_map)
             const $err_map_sym = $err_map
 
             function $route_name($(func_args...))::$rettype
-                resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)], status_exception = false)
-                $handle_errors
-                $ret_stmt
+                return Base.with_logger($cfg.logger) do
+                    resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)], status_exception = false)
+                    $handle_errors
+                    $ret_stmt
+                end
             end
         end)
     else
@@ -173,10 +176,12 @@ function construct_expressions(cfg, path, method, sig, err_map)
             $body_def
 
             function $route_name($(func_args...))::$rettype
-                $create_body_expr
-                resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)],  body=req_body, status_exception = false)
-                $handle_errors
-                $ret_stmt
+                return Base.with_logger($cfg.logger) do
+                    $create_body_expr
+                    resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)],  body=req_body, status_exception = false)
+                    $handle_errors
+                    $ret_stmt
+                end
             end
         end)
     end
