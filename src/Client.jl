@@ -17,7 +17,6 @@ end
 
 @kwdef struct ClientConfig
     url::String
-    exceptions::Dict{Int, Type{<:Exception}} = Dict{Int, Type{<:Exception}}()
 end
 
 function construct_body_type(
@@ -68,21 +67,21 @@ function get_error(resp)
     end
 end
 
-function get_exception(resp, cfg)
-    if !haskey(cfg.exceptions, resp.status)
+function get_exception(resp, err_map)
+    if !haskey(err_map, resp.status)
         throw(UnexpectedResponseError(
             resp.status,
             get_error(resp)
         ))
     end
-    type = cfg.exceptions[resp.status]
+    type = err_map[resp.status]
     if type <: CustomRequestError
         return read_json(resp.body, type)
     end
     return type(read_json(resp.body, ErrorResponse).error)
 end
 
-function construct_expressions(cfg, path, method, sig)
+function construct_expressions(cfg, path, method, sig, err_map)
     MacroTools.@capture(sig, route_name_(args__)::rettype_) ||
         error("Invalid endpoint signature. Maybe you forgot return type?")
     params = parse_params(args, path, route_name)
@@ -152,19 +151,25 @@ function construct_expressions(cfg, path, method, sig)
         ret_stmt = :(return $read_json(resp.body, $rettype))
     end
 
+    err_map_sym = gensym("errors_for_$route_name")
     handle_errors = quote
         if resp.status >= 300
-            throw($get_exception(resp, $cfg))
+            throw($get_exception(resp, $err_map_sym))
         end
     end
     if isnothing(create_body_expr)
-        res = esc(:(function $route_name($(func_args...))::$rettype
-            resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)], status_exception = false)
-            $handle_errors
-            $ret_stmt
-        end))
+        res = esc(quote
+            const $err_map_sym = $err_map
+
+            function $route_name($(func_args...))::$rettype
+                resp = $HTTP.request($method, $cfg.url * $url_patterm; query = [$(query_args...)], status_exception = false)
+                $handle_errors
+                $ret_stmt
+            end
+        end)
     else
         res = esc(quote
+            const $err_map_sym = $err_map
             $body_def
 
             function $route_name($(func_args...))::$rettype
@@ -187,20 +192,20 @@ API.@get(
 )
 ```
 """
-macro get(cfg, path, sig)
-    return construct_expressions(cfg, path, "GET", sig)
+macro get(cfg, path, sig, err_map)
+    return construct_expressions(cfg, path, "GET", sig, err_map)
 end
 
-macro post(cfg, path, sig)
-    return construct_expressions(cfg, path, "POST", sig)
+macro post(cfg, path, sig, err_map)
+    return construct_expressions(cfg, path, "POST", sig, err_map)
 end
 
-macro delete(cfg, path, sig)
-    return construct_expressions(cfg, path, "DELETE", sig)
+macro delete(cfg, path, sig, err_map)
+    return construct_expressions(cfg, path, "DELETE", sig, err_map)
 end
 
-macro put(cfg, path, sig)
-    return construct_expressions(cfg, path, "PUT", sig)
+macro put(cfg, path, sig, err_map)
+    return construct_expressions(cfg, path, "PUT", sig, err_map)
 end
 
 end

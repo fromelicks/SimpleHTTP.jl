@@ -8,14 +8,15 @@ struct UserNotFoundError <: Exception
 end
 
 using UUIDs: uuid4, UUID
-cfg = ServerConfig(
+const cfg = ServerConfig(
     ip = ip"0.0.0.0",
     port = 8080,
     path = "/api/v1/test",
-    error_codes = Pair{DataType, Int}[
-        UserNotFoundError => 404,
-    ]
 )
+
+const error_codes = Pair{DataType, Int}[
+    UserNotFoundError => 404,
+]
 
 mutable struct User
     id::UUID
@@ -41,7 +42,8 @@ Server.@post(
             data.name,
         )
         return id
-    end
+    end,
+    error_codes
 )
 
 Server.@delete(
@@ -50,7 +52,8 @@ Server.@delete(
     function delete_user(id::UUID)::Nothing
         delete!(users, [id])
         return nothing
-    end
+    end,
+    error_codes
 )
 
 Server.@post(
@@ -59,7 +62,8 @@ Server.@post(
     function set_age(id::UUID, age::Int)::Nothing
         users[id].age = age
         return nothing
-    end
+    end,
+    error_codes
 )
 
 Server.@get(
@@ -69,7 +73,8 @@ Server.@get(
         user = get(users, id, nothing)
         isnothing(user) && throw(UserNotFoundError("User id $id not found"))
         return users[id]
-    end
+    end,
+    error_codes
 )
 
 end

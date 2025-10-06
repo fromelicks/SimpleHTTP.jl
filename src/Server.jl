@@ -16,7 +16,6 @@ import Sockets: IPAddr, @ip_str
     port::Int
     path::String
     router::HTTP.Router = HTTP.Router()
-    error_codes::Vector{Pair{DataType, Int}} = Pair{DataType, Int}[]
 end
 
 get_query_params(req::HTTP.Request) = req.target |> HTTP.URI |> HTTP.queryparams
@@ -30,8 +29,8 @@ function find_err_code(code_map, e::Exception)
     return nothing
 end
 
-function error_response(cfg, e::Exception)
-    code = find_err_code(cfg.error_codes, e)
+function error_response(errors_map, e::Exception)
+    code = find_err_code(errors_map, e)
     isnothing(code) &&
         return make_response(500, write_json(ErrorResponse(e)))
     if e isa CustomRequestError
@@ -83,7 +82,7 @@ function construct_handler(
     body_type,
     rettype,
     route_function::Symbol,
-    cfg,
+    errors_map,
 )
     exprs = []
     resp_code = rettype == :Nothing ? 204 : 200
@@ -160,7 +159,7 @@ function construct_handler(
                     $route_function($(argnames...))
                 catch e
                     $report_error(e)
-                    return $error_response($cfg, e)
+                    return $error_response($errors_map, e)
                 end
                 return $make_response($resp_code, $write_json(res))
             end
@@ -168,7 +167,7 @@ function construct_handler(
     )
 end
 
-function create_route_bodies(path, func, cfg)
+function create_route_bodies(path, func, cfg, errors)
     #! format: off
     MacroTools.@capture(func, function route_name_(args__)::rettype_
         functionbody_
@@ -203,6 +202,8 @@ function create_route_bodies(path, func, cfg)
         body_type = nothing
     end
 
+    errors_var = gensym("errors_for_$route_name")
+    errors_def = esc(:(const $errors_var = $errors))
     func_args = Iterators.map(params) do (argname, par)
         return :($(argname)::$(par.type))
     end |> collect
@@ -212,14 +213,15 @@ function create_route_bodies(path, func, cfg)
     end))
     #! format: on
     handler_name, handler =
-        construct_handler(params, body_type, rettype, route_name, cfg)
-    return handler_name, body_def, handler_func, handler
+        construct_handler(params, body_type, rettype, route_name, errors_var)
+    return errors_def, handler_name, body_def, handler_func, handler
 end
 
-function create_route(cfg, path::String, method::String, handler::Expr)
-    handler_name, body_def, handler_func, handler =
-        create_route_bodies(path, handler, cfg)
+function create_route(cfg, path::String, method::String, handler::Expr, errors)
+    errors_def, handler_name, body_def, handler_func, handler =
+        create_route_bodies(path, handler, cfg, errors)
     return quote
+        $errors_def
         $body_def
         $handler_func
         $handler
@@ -252,20 +254,20 @@ API.@get(
 )
 ```
 """
-macro get(cfg, path, handler)
-    return create_route(cfg, path, "GET", handler)
+macro get(cfg, path, handler, errors)
+    return create_route(cfg, path, "GET", handler, errors)
 end
 
-macro post(cfg, path, handler)
-    return create_route(cfg, path, "POST", handler)
+macro post(cfg, path, handler, errors)
+    return create_route(cfg, path, "POST", handler, errors)
 end
 
-macro delete(cfg, path, handler)
-    return create_route(cfg, path, "DELETE", handler)
+macro delete(cfg, path, handler, errors)
+    return create_route(cfg, path, "DELETE", handler, errors)
 end
 
-macro put(cfg, path, handler)
-    return create_route(cfg, path, "PUT", handler)
+macro put(cfg, path, handler, errors)
+    return create_route(cfg, path, "PUT", handler, errors)
 end
 
 end
