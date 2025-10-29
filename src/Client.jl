@@ -2,8 +2,7 @@
 module Client
 
 using ..Common: make_response, report_error, ParamData, read_json,
-    parse_params, write_json, ArgLoc, ErrorResponse,
-    CustomRequestError,
+    parse_params, write_json, ArgLoc, ErrorResponse, deserialize,
     JSONFIELD, QUERY, URL, JSONFIELD, JSON, ALLHEADERS, HEADER
 
 import OrderedCollections: OrderedDict
@@ -76,10 +75,7 @@ function get_exception(resp, err_map)
         ))
     end
     type = err_map[resp.status]
-    if type <: CustomRequestError
-        return read_json(resp.body, type)
-    end
-    return type(read_json(resp.body, ErrorResponse).error)
+    return deserialize(resp.body, type)
 end
 
 function get_headers_def(params)

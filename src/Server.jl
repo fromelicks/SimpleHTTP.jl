@@ -3,7 +3,7 @@
 module Server
 
 using ..Common: make_response, report_error, ParamData, read_json,
-    parse_params, write_json, ArgLoc, CustomRequestError,
+    parse_params, write_json, ArgLoc, serialize,
     JSONFIELD, URL, QUERY, JSON, ALLHEADERS, HEADER, ErrorResponse
 
 import OrderedCollections: OrderedDict
@@ -32,11 +32,8 @@ end
 function error_response(errors_map, e::Exception)
     code = find_err_code(errors_map, e)
     isnothing(code) &&
-        return make_response(500, write_json(ErrorResponse(e)))
-    if e isa CustomRequestError
-        return make_response(code, write_json(e))
-    end
-    return make_response(code, write_json(ErrorResponse(e)))
+        return make_response(500, "Internal server error")
+    return make_response(code, serialize(e))
 end
 
 function parsing_error_response(e::Exception, type::Type)
@@ -189,7 +186,7 @@ function construct_handler(
                     $report_error(e)
                     return $error_response($errors_map, e)
                 end
-                return $make_response($resp_code, $write_json(res))
+                return $make_response($resp_code, $serialize(res))
             end
         end,
     )

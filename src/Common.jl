@@ -12,9 +12,6 @@ import Sockets: IPAddr
 const default_response_headers::Vector{Pair{String, String}} =
     Pair{String, String}["Content-Type"=>"application/json;charset=UTF-8"]
 
-
-abstract type CustomRequestError <: Exception end
-
 const AbstractExpr = Union{Symbol, Expr, QuoteNode, String}
 @enum ArgLoc QUERY URL JSONFIELD JSON ALLHEADERS HEADER
 
@@ -31,6 +28,8 @@ end
 
 write_json(x) = JSON3.write(x; allow_inf = true)
 read_json(x, T) = JSON3.read(x, T; allow_inf = true)
+deserialize(x, T) = read_json(x, T)
+serialize(x) = write_json(x)
 
 function make_response(code, content)
     if code == 204
