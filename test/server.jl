@@ -12,6 +12,7 @@ const cfg = ServerConfig(
     ip = ip"0.0.0.0",
     port = 8080,
     path = "/api/v1/test",
+    verbosity_500 = 2,
 )
 
 const error_codes = Pair{DataType, Int}[

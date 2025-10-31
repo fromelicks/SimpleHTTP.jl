@@ -16,6 +16,7 @@ import Sockets: IPAddr, @ip_str
     port::Int
     path::String
     router::HTTP.Router = HTTP.Router()
+    verbosity_500::Int
 end
 
 get_query_params(req::HTTP.Request) = req.target |> HTTP.URI |> HTTP.queryparams
@@ -29,10 +30,23 @@ function find_err_code(code_map, e::Exception)
     return nothing
 end
 
-function error_response(errors_map, e::Exception)
+function error_response(errors_map, e::Exception, verbosity_500::Int)
     code = find_err_code(errors_map, e)
-    isnothing(code) &&
-        return make_response(500, "Internal server error")
+    if isnothing(code)
+        if verbosity_500 > 0
+            buff = IOBuffer()
+            print(buff, string(e))
+            if verbosity_500 > 1
+                Base.show_backtrace(buff, catch_backtrace())
+            end
+            err = String(take!(buff))
+        else
+            err = "Internal server error"
+        end
+        return make_response(500,
+            serialize(ErrorResponse(err))
+        )
+    end
     return make_response(code, serialize(e))
 end
 
@@ -86,6 +100,7 @@ function construct_handler(
     rettype,
     route_function::Symbol,
     errors_map,
+    cfg_expr,
 )
     arg_defs = []
     resp_code = rettype == :Nothing ? 204 : 200
@@ -184,7 +199,7 @@ function construct_handler(
                     $route_function($(argnames...))
                 catch e
                     $report_error(e)
-                    return $error_response($errors_map, e)
+                    return $error_response($errors_map, e, ($cfg_expr).verbosity_500)
                 end
                 return $make_response($resp_code, $serialize(res))
             end
@@ -241,7 +256,7 @@ function create_route_bodies(path, func, cfg, errors)
     end))
     #! format: on
     handler_name, handler =
-        construct_handler(params, body_type, rettype, route_name, errors_var)
+        construct_handler(params, body_type, rettype, route_name, errors_var, cfg)
     return errors_def, handler_name, body_def, handler_func, handler
 end
 
