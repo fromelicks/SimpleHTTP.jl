@@ -156,7 +156,7 @@ function construct_expressions(cfg, path, method, sig, err_map)
         end
     end |> collect
     #! format: off
-    query_args = ( :($(string(name))=>$name) for name in keys(query_params))
+    query_args = ( :($(string(name))=>string($name)) for name in keys(query_params))
     url_patterm = if !isempty(url_params)
         Expr(:string, get_path_parts(path_parts)...)
     else
