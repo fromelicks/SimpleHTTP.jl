@@ -72,14 +72,14 @@ Client.@get(
 Client.@get(
     cfg,
     "/users/echo_headers",
-    echo_headers(lang::Headers)::Dict{String, String},
+    echo_headers(hdrs::Headers)::Dict{String, String},
     exceptions
 )
 
 Client.@get(
     cfg,
     "/users/echo_headers",
-    echo_headers_with_default(lang::Headers = Dict{String, String}(
+    echo_headers_with_default(hdrs::Headers = Dict{String, String}(
         "accept-language" => "ru",
         "auth" => "secret_token"
     ))::Dict{String, String},
