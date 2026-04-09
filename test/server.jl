@@ -51,7 +51,7 @@ Server.@delete(
     cfg,
     "/users/delete/{id}",
     function delete_user(id::UUID)::Nothing
-        delete!(users, [id])
+        delete!(users, id)
         return nothing
     end,
     error_codes
