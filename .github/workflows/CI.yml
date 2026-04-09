@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - '**'  # Run on all branches
   pull_request:
   workflow_dispatch:
 
