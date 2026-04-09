@@ -49,8 +49,7 @@ end
 
 function error_string(e::T) where {T <: Exception}
     flds = fieldnames(T)
-    if length(flds) == 1 &&
-        only(fieldtypes(T))  <: AbstractString
+    if length(flds) == 1 && only(fieldtypes(T)) <: AbstractString
         return getproperty(e, only(flds))
     end
     return string(e)

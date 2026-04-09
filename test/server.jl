@@ -8,16 +8,14 @@ struct UserNotFoundError <: Exception
 end
 
 using UUIDs: uuid4, UUID
-const cfg = ServerConfig(
+const cfg = ServerConfig(;
     ip = ip"0.0.0.0",
     port = 8080,
     path = "/api/v1/test",
     verbosity_500 = 2,
 )
 
-const error_codes = Pair{DataType, Int}[
-    UserNotFoundError => 404,
-]
+const error_codes = Pair{DataType, Int}[UserNotFoundError=>404,]
 
 mutable struct User
     id::UUID
@@ -43,11 +41,7 @@ Server.@post(
     "/users/create",
     function create_user(data::Json{CreateUserRequest})::UUID
         id = uuid4()
-        users[id] = User(
-            id,
-            data.age,
-            data.name,
-        )
+        users[id] = User(id, data.age, data.name)
         return id
     end,
     error_codes

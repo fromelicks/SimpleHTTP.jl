@@ -2,7 +2,6 @@
 using SimpleHTTP
 using Test
 
-
 include("server.jl")
 include("client.jl")
 
@@ -55,7 +54,7 @@ end
 
     default_headers = Dict{String, String}(
         "accept-language" => "ru",
-        "auth" => "secret_token"
+        "auth" => "secret_token",
     )
 
     res = App.echo_headers_with_default()
