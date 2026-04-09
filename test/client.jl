@@ -74,4 +74,8 @@ Client.@get(
     exceptions
 )
 
+Client.@get(cfg, "/users/names", get_user_names()::Vector{String}, exceptions)
+
+Client.@get(cfg, "/users/ages", get_user_ages()::Vector{Int}, exceptions)
+
 end

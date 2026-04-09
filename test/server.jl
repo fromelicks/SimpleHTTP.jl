@@ -105,4 +105,22 @@ Server.@get(
     error_codes
 )
 
+Server.@get(
+    cfg,
+    "/users/names",
+    function get_user_names()::Vector{String}
+        return sort([u.name for u in values(users)])
+    end,
+    error_codes
+)
+
+Server.@get(
+    cfg,
+    "/users/ages",
+    function get_user_ages()::Vector{Int}
+        return sort([u.age for u in values(users)])
+    end,
+    error_codes
+)
+
 end
